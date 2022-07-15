@@ -1,9 +1,20 @@
-import Categoria from "../models/Categoria";
+import Emprestimo from "../models/Emprestimo";
+import EmprestimoLivro from "../models/EmprestimoLivro";
+import Livro from "../models/Livro";
+import { Op } from "sequelize"
+import { sequelize } from "../config/config";
 
 const getAll = async (req, res) => {
   try {
-    const categorias = await Categoria.findAll();
-    return res.status(200).send(categorias);
+    const emprestimos = await Emprestimo.findAll();
+    let response = [];
+    for (let emprestimo of emprestimos) {
+      let livros = await emprestimo.getLivros(); //pegamos os livros do MODEL Emprestimo
+      emprestimo = emprestimo.toJSON(); //converter o emprestimo para JSON
+      emprestimo.livros = livros; //setar no JSON do emprestimo um novo atributo livros
+      response.push(emprestimo);
+    }
+    return res.status(200).send(response);
   } catch (error) {
     return res.status(500).send({
       message: error.message
@@ -16,26 +27,31 @@ const getById = async (req, res) => {
     let { id } = req.params;
 
     //garante que o id só vai ter NUMEROS;
-    id = id.replace(/\D/g, '');
+    id = id ? id.toString().replace(/\D/g, '') : null;
     if (!id) {
       return res.status(400).send({
         message: 'Informe um id válido para consulta'
       });
     }
 
-    let categoria = await Categoria.findOne({
+    let emprestimo = await Emprestimo.findOne({
       where: {
         id
       }
     });
 
-    if (!categoria) {
+    if (!emprestimo) {
       return res.status(400).send({
-        message: `Não foi encontrada categoria com o id ${id}`
+        message: `Não foi encontrado emprestimo com o id ${id}`
       });
     }
 
-    return res.status(200).send(categoria);
+    let response = emprestimo.toJSON();
+    response.livros = await emprestimo.getLivros({
+      attributes: ['id', 'titulo'],
+    });
+
+    return res.status(200).send(response);
   } catch (error) {
     return res.status(500).send({
       message: error.message
@@ -60,81 +76,156 @@ const persistir = async (req, res) => {
 }
 
 const create = async (dados, res) => {
-  let { nome } = dados;
+  let { prazo, devolucao, idUsuario, livros } = dados;
 
-  let categoriaExistente = await Categoria.findOne({
-    where: {
-      nome
-    }
+  let emprestimo = await Emprestimo.create({
+    prazo, devolucao, idUsuario
   });
-
-  if (categoriaExistente) {
-    return res.status(400).send({
-      message: 'Já existe uma categoria cadastrada com esse nome'
+  
+  for (let index = 0; index < livros.length; index++) {
+    
+    let livroExistente = await Livro.findOne({
+      where: {
+        id: livros[index]
+      }
     })
-  }
+    
+    //livro não existente não pode ser emprestado
+    //com isso o emprestimo é cancelado/excluido
+    if (!livroExistente) {
+      await emprestimo.destroy();
+      return res.status(400).send({
+        message: `O livro id ${livros[index]} não existe. O empréstimo não foi salvo!!`
+      })
+    }
 
-  let categoria = await Categoria.create({
-    nome
-  });
-  return res.status(201).send(categoria)
+    let livroEmprestado = await sequelize.query(`
+      select
+        id_emprestimo as id
+      from emprestimo_livros as el
+      inner join emprestimos as e on (e.id = el.id_emprestimo)
+      where e.devolucao is null and el.id_livro = ${livros[index]}
+    `);
+
+    if (livroEmprestado[1].rowCount) {
+      await emprestimo.destroy();
+      livroEmprestado = livroEmprestado[0][0] ? livroEmprestado[0][0].id : '';
+      return res.status(400).send({
+        message: `O livro id ${livros[index]} já está emprestado no empréstimo ${livroEmprestado}. O empréstimo não foi salvo!!`
+      })
+    };
+
+    await EmprestimoLivro.create({
+      idEmprestimo: emprestimo.id,
+      idLivro: livros[index]
+    });
+  }
+  
+  return res.status(201).send(emprestimo)
 }
 
 const update = async (id, dados, res) => {
-  let { nome } = dados;
-  let categoria = await Categoria.findOne({
+  let emprestimo = await Emprestimo.findOne({
     where: {
       id
     }
   });
 
-  if (!categoria) {
-    return res.status(400).send({ type: 'error', message: `Não foi encontrada categoria com o id ${id}` })
+  if (!emprestimo) {
+    return res.status(400).send({ type: 'error', message: `Não foi encontrada emprestimo com o id ${id}` })
   }
 
-  //TODO: desenvolver uma lógica pra validar todos os campos
-  //que vieram para atualizar e entao atualizar
-  if (nome) {
-    categoria.nome = nome;
-  };
+  //update dos campos
+  Object.keys(dados).forEach(field => emprestimo[field] = dados[field]);
 
-  await categoria.save();
+  await emprestimo.save();
   return res.status(200).send({
-    message: `Categoria ${id} atualizada com sucesso`,
-    data: categoria
+    message: `Emprestimo ${id} atualizada com sucesso`,
+    data: emprestimo
   });
 }
 
 const deletar = async (req, res) => {
   try {
     let { id } = req.body;
-    
     //garante que o id só vai ter NUMEROS;
-    id = id ? id.toString().replace(/\D/g, '') : null;
+    id = id ? id.replace(/\D/g, '') : null;
     if (!id) {
       return res.status(400).send({
-        message: 'Informe um id válido para deletar a categoria'
+        message: 'Informe um id válido para deletar o emprestimo'
       });
     }
 
-    let categoria = await Categoria.findOne({
+    let emprestimo = await Emprestimo.findOne({
       where: {
         id
       }
     });
 
-    if (!categoria) {
-      return res.status(400).send({ message: `Não foi encontrada categoria com o id ${id}` })
+    if (!emprestimo) {
+      return res.status(400).send({ message: `Não foi encontrada emprestimo com o id ${id}` })
     }
 
-    await categoria.destroy();
+    await emprestimo.destroy();
     return res.status(200).send({
-      message: `Categoria id ${id} deletada com sucesso`
-    })
+      message: `Emprestimo id ${id} deletada com sucesso`
+    });
   } catch (error) {
     return res.status(500).send({
       message: error.message
+    });
+  }
+}
+
+const emprestadoOuNao = async (req, res) => {
+  try {
+    let { idLivro } = req.body;
+
+    idLivro = idLivro ? idLivro.toString().replace(/\D/g, '') : null;
+
+    if (!idLivro) {
+      return res.status(400).send({
+        message: 'Informe um id de um livro que ja existe'
+      });
+    }
+
+    let livro = await Livro.findOne({
+      where: {
+        id: idLivro
+      }
     })
+
+    if (!livro) {
+      return res.status(400).send({
+        message: `Não foi encontrado um livro com o id ${idLivro}`
+      });
+    }
+
+    let emprestimos = await livro.getEmprestimos({
+      where: {
+        devolucao: {
+          [Op.is]: null
+        } 
+      } 
+    });
+
+    if (!emprestimos.length) {
+      return res.status(400).send({
+        message: `Não existe um emprestimo com esse id ${idLivro}` 
+      });
+    }
+
+    return res.status(200).send({
+      message: `Ja existe um emprestimo com esse id ${idLivro}`,
+      emprestimos
+    })
+
+
+
+  } catch (error) {
+    return res.status(500).send({
+      message: error.message
+    });
   }
 }
 
@@ -142,5 +233,6 @@ export default {
   getAll,
   getById,
   persistir,
-  deletar
+  deletar,
+  emprestadoOuNao
 };

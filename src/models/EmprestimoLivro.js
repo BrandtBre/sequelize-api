@@ -11,7 +11,6 @@ const EmprestimoLivro = sequelize.define(
       primaryKey: true,
       autoIncrement: true
     },
- 
   },
   {
     freezeTableName: true,
@@ -22,22 +21,22 @@ const EmprestimoLivro = sequelize.define(
 );
 
 Emprestimo.belongsToMany(Livro, { 
-  through: EmprestimoLivro,
-  as: 'livros',
+  through: EmprestimoLivro, //tabela/modelo associativa
+  as: 'livros', //'Livros'
   foreignKey: {
-    name: 'idLivro',
-    allowNull: false,
-    field: 'id_livro'
+    name: 'idEmprestimo',
+    field: 'id_emprestimo',
+    allowNull: false
   } 
 });
 
-Livro.belongsToMany(Emprestimo, { 
+Livro.belongsToMany(Emprestimo, {
   through: EmprestimoLivro,
-  as: 'emprestimo',
+  as: 'emprestimos',
   foreignKey: {
-    name: 'idEmprestimo',
-    allowNull: false,
-    field: 'id_emprestimo'
+    name: 'idLivro',
+    field: 'id_livro',
+    allowNull: false
   }
 });
 
