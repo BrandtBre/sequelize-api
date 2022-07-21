@@ -75,7 +75,8 @@ const create = async (dados, res) => {
   }
 
   let autor = await Autor.create({
-    nome
+    nome,
+    email
   });
   return res.status(201).send(autor)
 }
