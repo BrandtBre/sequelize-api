@@ -211,11 +211,13 @@ const emprestadoOuNao = async (req, res) => {
 
     if (!emprestimos.length) {
       return res.status(400).send({
+        emprestado: false,
         message: `Não existe um emprestimo com esse id ${idLivro}` 
       });
     }
 
     return res.status(200).send({
+      emprestado: true,
       message: `Ja existe um emprestimo com esse id ${idLivro}`,
       emprestimos
     })
