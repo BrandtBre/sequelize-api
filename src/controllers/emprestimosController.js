@@ -210,7 +210,7 @@ const emprestadoOuNao = async (req, res) => {
     });
 
     if (!emprestimos.length) {
-      return res.status(400).send({
+      return res.status(200).send({
         emprestado: false,
         message: `Não existe um emprestimo com esse id ${idLivro}` 
       });
