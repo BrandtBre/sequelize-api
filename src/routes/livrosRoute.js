@@ -6,4 +6,5 @@ export default (app) => {
 	app.get('/livros/:id', controller.getById)
 	app.post('/livros', controller.persistir)
 	app.post('/livros/:id', controller.persistir)
+	app.get('/livros-disponiveis', controller.getAllDisponiveis)
 }   

@@ -1,4 +1,5 @@
 import Livro from "../models/Livro";
+import { Op } from "sequelize";
 
 const getAll = async (req, res) => {
   try {
@@ -57,6 +58,26 @@ const persistir = async (req, res) => {
       message: error.message
     })
   }
+}
+
+const getAllDisponiveis = async (req, res) => {
+  let livros = await Livro.findAll();
+  let livrosDisponiveis = [];
+  for (let livro of livros) {
+    let emprestimos = await livro.getEmprestimos({
+      where: {
+        devolucao: {
+          [Op.is]: null
+        }
+      }
+    });
+
+    if (!emprestimos.length) {
+      livrosDisponiveis.push(livro)
+    }
+  };
+
+  return res.status(200).send(livrosDisponiveis);
 }
 
 const create = async (dados, res) => {
@@ -137,5 +158,6 @@ export default {
   getAll,
   getById,
   persistir,
-  deletar
+  deletar,
+  getAllDisponiveis
 };
